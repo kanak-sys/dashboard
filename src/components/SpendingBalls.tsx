@@ -38,7 +38,8 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
   const animRef = useRef<number>(0);
   const mouseRef = useRef({ x: -999, y: -999 });
   const timeRef = useRef(0);
-  const [, forceRender] = useState(0);
+  const [balls, setBalls] = useState<Ball[]>([]);
+  const [time, setTime] = useState(0);
   const [hoveredBall, setHoveredBall] = useState<number | null>(null);
 
   useEffect(() => {
@@ -64,7 +65,7 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
         pulsePhase: Math.random() * Math.PI * 2,
       };
     });
-    forceRender((n) => n + 1);
+    setBalls([...ballsRef.current]);
 
     const animate = () => {
       timeRef.current += 0.016;
@@ -140,7 +141,8 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
         if (b.y + r > H2 - pad) { b.y = H2 - r - pad; b.vy = -Math.abs(b.vy) * 0.7; }
       }
 
-      forceRender((n) => n + 1);
+      setBalls([...ballsRef.current]);
+      setTime(timeRef.current);
       animRef.current = requestAnimationFrame(animate);
     };
 
@@ -183,10 +185,10 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
             'radial-gradient(ellipse at 30% 40%, rgba(45,90,61,0.12) 0%, transparent 60%), radial-gradient(ellipse at 80% 70%, rgba(201,168,76,0.08) 0%, transparent 50%)',
         }}
       >
-        {ballsRef.current.map((ball) => {
+        {balls.map((ball) => {
           const isHovered = hoveredBall === ball.id;
           const glowColor = ball.data.color;
-          const pulse = Math.sin(timeRef.current * 1.5 + ball.pulsePhase) * 0.04;
+          const pulse = Math.sin(time * 1.5 + ball.pulsePhase) * 0.04;
           const scale = isHovered ? 1.12 : 1 + pulse;
 
           return (
@@ -315,7 +317,7 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
       </div>
 
       {/* Tooltip for hovered ball */}
-      {hoveredBall !== null && ballsRef.current[hoveredBall] && (
+      {hoveredBall !== null && balls[hoveredBall] && (
         <div
           style={{
             position: 'absolute',
@@ -332,14 +334,14 @@ export default function SpendingBalls({ categories, totalExpenses }: Props) {
           }}
         >
           <div style={{ color: '#F5F0E8', fontWeight: 700, fontSize: 13 }}>
-            {ballsRef.current[hoveredBall].data.icon}{' '}
-            {ballsRef.current[hoveredBall].data.name}
+            {balls[hoveredBall].data.icon}{' '}
+            {balls[hoveredBall].data.name}
           </div>
           <div style={{ color: '#C9A84C', fontWeight: 700, fontSize: 16, marginTop: 2 }}>
-            {formatCurrencyShort(ballsRef.current[hoveredBall].data.value)}
+            {formatCurrencyShort(balls[hoveredBall].data.value)}
           </div>
           <div style={{ color: 'rgba(245,240,232,0.6)', fontSize: 11, marginTop: 2 }}>
-            {pct(ballsRef.current[hoveredBall].data.value)}% of expenses
+            {pct(balls[hoveredBall].data.value)}% of expenses
           </div>
         </div>
       )}

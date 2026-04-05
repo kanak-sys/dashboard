@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell,
+  BarChart, Bar,
 } from 'recharts';
+import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types';
+import type { BarShapeProps } from 'recharts/types/cartesian/Bar';
 import { useStore } from '../store/useStore';
 import {
   getSummaryStats, getMonthlyData, getCategoryBreakdown,
@@ -127,7 +129,20 @@ function StatCard({ type, icon, label, raw, isSavings, sub, subClass }: {
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipPayloadEntry {
+  name: string;
+  value: number;
+  color: string;
+  fill: string;
+}
+
+interface ChartTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   if (active && payload?.length) {
     return (
       <div style={{
@@ -136,7 +151,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
       }}>
         <p style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: '#F5F0E8' }}>{label}</p>
-        {payload.map((p: any) => (
+        {payload.map((p) => (
           <p key={p.name} style={{ fontSize: 12, color: p.color, fontWeight: 500 }}>
             {p.name}: {formatCurrency(p.value)}
           </p>
@@ -147,9 +162,36 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+/* ─── CustomTooltip3D — declared outside MonthlySummaryChart to avoid react-hooks/static-components ── */
+const CustomTooltip3D = ({ active, payload, label }: ChartTooltipProps) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: 'rgba(18,38,26,0.92)', backdropFilter: 'blur(16px)',
+      border: '1px solid rgba(201,168,76,0.3)', borderRadius: 14,
+      padding: '12px 16px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+      minWidth: 160,
+    }}>
+      <p style={{ fontWeight: 800, marginBottom: 8, fontSize: 13, color: '#F5F0E8', letterSpacing: '-0.2px' }}>{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
+          <span style={{ fontSize: 12, color: p.fill, fontWeight: 600 }}>{p.name}</span>
+          <span style={{ fontSize: 12, color: '#F5F0E8', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
+            ₹{Number(p.value).toLocaleString('en-IN')}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+interface Bar3DProps extends BarShapeProps {
+  isActive: boolean;
+}
+
 /* ─── 3D Bar shape ──────────────────────────────────────────── */
-function Bar3D(props: any) {
-  const { x, y, width, height, fill, isActive } = props;
+function Bar3D(props: Bar3DProps) {
+  const { x = 0, y = 0, width = 0, height = 0, fill = 'transparent', isActive } = props;
   if (!height || height <= 0) return null;
   const r = 6;
   const opacity = isActive ? 1 : 0.52;
@@ -208,25 +250,24 @@ function MonthlySummaryChart({ monthly }: { monthly: Array<{ name: string; incom
   const [orbPos, setOrbPos] = useState({ x: 0, y: 0 });
   const [orbColor, setOrbColor] = useState('#2D7A45');
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
 
   // Track mouse over chart to move orb
-  const handleMouseMove = useCallback((state: any) => {
-    if (state?.isTooltipActive && state.activeTooltipIndex !== undefined) {
-      const idx = state.activeTooltipIndex;
+  const handleMouseMove = useCallback((state: MouseHandlerDataParam) => {
+    if (state?.isTooltipActive && state.activeTooltipIndex != null) {
+      const idx = state.activeTooltipIndex as number;
       setActiveIdx(idx);
       // pick highest bar's color for orb
       const d = monthly[idx];
       if (!d) return;
       const maxKey = d.income >= d.balance ? 'income' : 'balance';
       setOrbColor(maxKey === 'income' ? '#2D7A45' : '#C9A84C');
-      // calculate orb position from chart coordinates
-      if (state.chartX !== undefined && state.chartY !== undefined) {
+      // calculate orb position from activeCoordinate
+      if (state.activeCoordinate) {
         const rect = containerRef.current?.getBoundingClientRect();
         const chartArea = containerRef.current?.querySelector('.recharts-cartesian-grid');
         const areaRect = chartArea?.getBoundingClientRect();
         if (rect && areaRect) {
-          const relX = (areaRect.left - rect.left) + state.chartX - 16;
+          const relX = (areaRect.left - rect.left) + state.activeCoordinate.x - 16;
           const relY = (areaRect.top - rect.top) - 28;
           setOrbPos({ x: relX, y: Math.max(relY, 10) });
         }
@@ -237,28 +278,6 @@ function MonthlySummaryChart({ monthly }: { monthly: Array<{ name: string; incom
   const handleMouseLeave = useCallback(() => {
     setActiveIdx(null);
   }, []);
-
-  const CustomTooltip3D = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div style={{
-        background: 'rgba(18,38,26,0.92)', backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(201,168,76,0.3)', borderRadius: 14,
-        padding: '12px 16px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
-        minWidth: 160,
-      }}>
-        <p style={{ fontWeight: 800, marginBottom: 8, fontSize: 13, color: '#F5F0E8', letterSpacing: '-0.2px' }}>{label}</p>
-        {payload.map((p: any) => (
-          <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
-            <span style={{ fontSize: 12, color: p.fill, fontWeight: 600 }}>{p.name}</span>
-            <span style={{ fontSize: 12, color: '#F5F0E8', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
-              ₹{Number(p.value).toLocaleString('en-IN')}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <div className="monthly-chart-card" ref={containerRef}>
@@ -297,7 +316,6 @@ function MonthlySummaryChart({ monthly }: { monthly: Array<{ name: string; incom
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <BarChart
-              ref={chartRef}
               data={monthly}
               margin={{ top: 16, right: 16, bottom: 5, left: 10 }}
               barCategoryGap="28%"
@@ -341,13 +359,13 @@ function MonthlySummaryChart({ monthly }: { monthly: Array<{ name: string; incom
               <Tooltip content={<CustomTooltip3D />} cursor={{ fill: 'rgba(255,255,255,0.04)', radius: 8 }} />
 
               <Bar dataKey="income" name="Income" maxBarSize={32}
-                shape={(p: any) => <Bar3D {...p} fill="url(#incomeGrad3d)" isActive={activeIdx === null || activeIdx === p.index} />}
+                shape={(p: BarShapeProps) => <Bar3D {...p} fill="url(#incomeGrad3d)" isActive={activeIdx === null || activeIdx === (p.index as number)} />}
               />
               <Bar dataKey="expenses" name="Expenses" maxBarSize={32}
-                shape={(p: any) => <Bar3D {...p} fill="url(#expenseGrad3d)" isActive={activeIdx === null || activeIdx === p.index} />}
+                shape={(p: BarShapeProps) => <Bar3D {...p} fill="url(#expenseGrad3d)" isActive={activeIdx === null || activeIdx === (p.index as number)} />}
               />
               <Bar dataKey="balance" name="Net Balance" maxBarSize={32}
-                shape={(p: any) => <Bar3D {...p} fill="url(#balanceGrad3d)" isActive={activeIdx === null || activeIdx === p.index} />}
+                shape={(p: BarShapeProps) => <Bar3D {...p} fill="url(#balanceGrad3d)" isActive={activeIdx === null || activeIdx === (p.index as number)} />}
               />
             </BarChart>
           </ResponsiveContainer>
